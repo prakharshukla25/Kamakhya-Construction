@@ -2,6 +2,7 @@
 Thumbs.db
 dist/
 .local/
+/ESTIMATE.md
 .cache/
 .venv/
 __pycache__/

@@ -119,5 +119,3 @@ Deployment and billing documentation checked on 15 November 2026:
 - [Docker: pinning image digests](https://docs.docker.com/build/building/best-practices/#pin-base-image-versions)
 - [NGINX: official unprivileged image source](https://github.com/nginx/docker-nginx-unprivileged)
 - [Docker: Compose service configuration](https://docs.docker.com/reference/compose-file/services/)
-
-See [ESTIMATE.md](ESTIMATE.md) for the proposed project quote and operating-cost assumptions.
