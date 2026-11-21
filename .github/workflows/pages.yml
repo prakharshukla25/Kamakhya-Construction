@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      demo_mode:
+        description: Publish a client demo with the labelled preview email
+        type: boolean
+        required: false
+        default: false
 
 # Grant access only to the jobs that need it.
 permissions: {}
@@ -31,9 +37,14 @@ jobs:
       - name: Validate content and local assets
         run: python3 scripts/check.py
 
-      - name: Require real contact details before publishing
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - name: Require real contact details for production
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !(github.event_name == 'workflow_dispatch' && inputs.demo_mode == true)
         run: python3 scripts/check.py --strict-contact
+
+      - name: Record intentional client demo
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.demo_mode == true
+        run: |
+          printf '%s\n' '### Client demo' 'The company email remains a labelled preview address. Static validation, Docker smoke tests, and artifact checks still run. Automatic production deployments still require real contact details.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build static artifact
         run: python3 scripts/build.py

@@ -2,7 +2,7 @@
 
 A responsive, static company and interior design portfolio with light/dark themes, project photography, and direct contact links. Built with HTML, CSS, and JavaScript. Includes a multi-stage Docker preview and GitHub Actions CI/CD; the public deployment target remains GitHub Pages.
 
-The current version is for **local review**. No changes have been pushed or published. The email is explicitly a placeholder and must be replaced before deployment.
+The current version supports **local review and an intentional client demo**. The company email is explicitly a placeholder; replace it before a production deployment. The manual demo option described below allows the labelled preview email without disabling the site or container checks.
 
 ## Local preview
 
@@ -36,7 +36,7 @@ Check publication readiness:
 python3 scripts/check.py --strict-contact
 ```
 
-The normal check allows an unfinished contact configuration for local review and prints a warning. The strict check requires the company name, phone, and a real email. It rejects `emailIsPlaceholder: true` and reserved example domains. A dummy email cannot pass the deployment gate.
+The normal check allows an unfinished contact configuration for local review and prints a warning. The strict check requires the company name, phone, and a real email. It rejects `emailIsPlaceholder: true` and reserved example domains. Production runs always use the strict check. Only a manual run with `demo_mode` explicitly enabled skips that production-only check; all normal validation and Docker smoke tests still apply.
 
 ## Edit content
 
@@ -55,11 +55,13 @@ The enquiry form prepares a message for the visitor to review, then opens WhatsA
 
 The workflow is prepared in `.github/workflows/pages.yml`. Running the local commands above does not deploy anything.
 
-1. Finish local review and replace the dummy email.
-2. After approval, add the files to the repository and push the agreed commit to `main` using your chosen commands.
+1. Finish local review. For production, replace the dummy email; for a client demo, keep its visible preview label and select the manual demo option in step 4.
+2. Push the agreed workflow changes to `main` using your chosen commands.
 3. On GitHub, go to **Settings → Pages → Build and deployment → Source**, then select **GitHub Actions**. GitHub may create the `github-pages` environment automatically; restrict its deployment branches to `main` in the repository environment settings.
-4. After enabling Pages, open **Actions → Validate and deploy GitHub Pages → Run workflow**, selecting `main`. This also handles an initial push that ran before Pages was configured. The workflow validates and builds the site, checks real contact details, packages only `dist/`, and deploys. Subsequent pushes to `main` deploy automatically; pull requests validate/build without publishing. Manual runs deploy only when `main` is selected.
+4. After enabling Pages, open **Actions → Validate and deploy GitHub Pages → Run workflow**, selecting `main`. For a client demo, check **Publish a client demo with the labelled preview email** (`demo_mode`). Leave it unchecked for production; its default is `false`. This also handles an initial push that ran before Pages was configured. The workflow validates and builds the site, runs the Docker smoke test, packages only `dist/`, and deploys. Pushes to `main` always require real contact details, even after a demo. Pull requests validate/build without publishing; manual runs deploy only when `main` is selected.
 5. Open the deployment URL reported by the Actions run. For this repository it is expected to be `https://prakharshukla25.github.io/Kamakhya-Construction/`, subject to repository and Pages settings.
+
+The demo and production use the same public GitHub Pages URL. Demo mode does not create a private preview or change the displayed email; it permits the existing clearly labelled placeholder for a manually requested client review. To publish the finished version, replace the email and clear `emailIsPlaceholder`, then push `main` or run the workflow with `demo_mode` unchecked.
 
 The workflow uses official GitHub Actions pinned to immutable release SHAs, separate build/container/deploy jobs, limited token permissions, deployment concurrency, and short artifact retention. Every PR and main-branch run checks the static site and builds/smoke-tests the Docker image. Deployment requires both jobs to pass. The deployment job uses GitHub's OIDC token; no personal access token or cloud secret is required. No Docker image is pushed to a registry. Update action pins intentionally when maintaining the repository.
 
@@ -95,11 +97,11 @@ curl --fail http://127.0.0.1:8080/healthz
 docker compose down
 ```
 
-For a standalone image build, use `docker build --tag kamkhaya-construction:local .`. The Dockerfile runs the dependency-free Python validator/build in its first stage and copies only `dist/` into the final NGINX image. Docker builds allow the clearly marked dummy email for preview; the Pages deployment gate still requires a real email.
+For a standalone image build, use `docker build --tag kamkhaya-construction:local .`. The Dockerfile runs the dependency-free Python validator/build in its first stage and copies only `dist/` into the final NGINX image. Docker builds allow the clearly marked dummy email for preview; production Pages runs still require a real email, while a manual `demo_mode` run permits the labelled placeholder.
 
 Both base images are pinned to public registry digests verified on 15 November 2026. The runtime inherits NGINX's unprivileged user (UID 101), listens on 8080, bypasses configuration-rewriting entrypoint scripts, and writes its PID/temporary files only under `/tmp`. Compose uses a read-only filesystem, `/tmp` tmpfs, no Linux capabilities, and no privilege escalation. Health checks use `/healthz`; HTML revalidates and unhashed assets cache for one hour. These headers apply to the container, while GitHub controls the headers on GitHub Pages.
 
-Docker is not installed in the current local environment, so the container build/runtime has **not** been verified here. The prepared CI smoke test will build the image, validate Compose, request the homepage/health endpoint/config asset, check the runtime user, and confirm private Git paths return 404 when it is first run on GitHub. No GitHub workflow has been run or published yet.
+Docker is not installed locally. The Docker image build and read-only container smoke test passed in [GitHub Actions run 44853999782](https://github.com/prakharshukla25/Kamakhya-Construction/actions/runs/44853999782). That run stopped at the production check for the dummy email; the manual demo option handles this intentional preview state. The smoke test validates Compose, requests the homepage/health endpoint/config asset, checks the runtime user, and confirms private Git paths return 404.
 
 Optional Make shortcuts: `make preview`, `make check`, `make ready`, `make build`, `make preview-dist`, `make docker-build`, `make docker-up`, and `make docker-down`.
 
@@ -109,6 +111,7 @@ Deployment and billing documentation checked on 15 November 2026:
 
 - [GitHub: custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 - [GitHub: configuring a Pages publishing source](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+- [GitHub: manual workflow inputs and boolean types](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onworkflow_dispatchinputs)
 - [GitHub: Pages eligibility and project URLs](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
 - [GitHub: Pages usage limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
 - [GitHub: Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
