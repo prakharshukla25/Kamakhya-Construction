@@ -1,0 +1,116 @@
+name: Validate and deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Grant access only to the jobs that need it.
+permissions: {}
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Check and package static site
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate content and local assets
+        run: python3 scripts/check.py
+
+      - name: Require real contact details before publishing
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: python3 scripts/check.py --strict-contact
+
+      - name: Build static artifact
+        run: python3 scripts/build.py
+
+      - name: Validate packaged artifact
+        run: python3 scripts/check.py --root dist
+
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Upload only the static site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: dist
+          retention-days: 1
+
+  container:
+    name: Build and smoke test Docker preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build container without publishing an image
+        run: docker build --tag kamkhaya-construction:ci .
+
+      - name: Smoke test read-only unprivileged container
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="kamkhaya-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm --force "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name "$container_name" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --pids-limit 64 \
+            --memory 128m \
+            --publish 127.0.0.1:8080:8080 \
+            kamkhaya-construction:ci
+          curl --fail --silent --show-error --retry 15 --retry-connrefused \
+            --retry-delay 1 --retry-max-time 30 \
+            http://127.0.0.1:8080/healthz
+          curl --fail --silent --show-error http://127.0.0.1:8080/ --output /tmp/kamkhaya-home.html
+          python3 -c 'from pathlib import Path; assert "Kamkhaya" in Path("/tmp/kamkhaya-home.html").read_text(), "Homepage content missing"'
+          curl --fail --silent --show-error http://127.0.0.1:8080/assets/js/company.js --output /dev/null
+          test "$(docker exec "$container_name" id -u)" != "0"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/.git/config)" = "404"
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [build, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy verified artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

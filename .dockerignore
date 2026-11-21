@@ -1,0 +1,17 @@
+# Only public source and dependency-free build scripts enter the build context.
+**
+!Dockerfile
+!nginx.conf
+!index.html
+!404.html
+!robots.txt
+!site.webmanifest
+!favicon.svg
+!CNAME
+!assets/
+!assets/**
+!scripts/
+!scripts/build.py
+!scripts/check.py
+assets/**/.*
+assets/**/__pycache__/
